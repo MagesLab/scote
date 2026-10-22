@@ -1,0 +1,1 @@
+# Tracked files allowed above 1 MB (one repository-relative path per line), e.g. README figures.

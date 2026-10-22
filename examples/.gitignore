@@ -1,0 +1,9 @@
+# produced by the workflow and the figure scripts; not part of the repository
+data/
+logs/
+results/
+.snakemake/
+figures/*.pdf
+figures/*.png
+figures/quicklook/
+__pycache__/

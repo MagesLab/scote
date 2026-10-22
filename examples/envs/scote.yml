@@ -1,0 +1,38 @@
+# Environment of the rules (ENV_SCOTE in the Snakefile): the dependencies of scote and of the scripts, with the versions
+# of the preprint runs (Python 3.12 on Linux x86_64); Snakemake creates it with --sdm conda. scote itself is not
+# installed: the rules import it from the src/ of the checkout (SCOTE_SRC in the Snakefile). The figure scripts alone
+# need numpy, scipy, pandas and matplotlib. GPU rules need a CUDA build of torch.
+name: scote-examples
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - numpy==2.5.3
+      - scipy==1.18.1
+      - pandas==3.0.5
+      - pyarrow==25.0.1
+      - polars==1.44.2
+      - numba==0.67.0
+      - llvmlite==0.49.0
+      - threadpoolctl==3.6.0
+      - matplotlib==3.11.1
+      - pyyaml==6.0.3
+      - psutil==7.2.2
+      - h5py==3.16.0
+      - zarr==3.3.0
+      - numcodecs==0.16.5
+      - tifffile==2026.9.9
+      - pillow==12.3.0
+      - scikit-learn==1.9.1          # DBSCAN (Fig. 5f)
+      - scikit-image==0.26.0         # registration of the ovarian sections (Fig. S3)
+      - opencv-python-headless       # registration of the ovarian sections (Fig. S3); version of the preprint run not recorded
+      - anndata==0.13.3.post0
+      - scanpy==1.12.4               # leiden pipeline (Fig. 5f)
+      - leidenalg==0.12.0
+      - igraph==1.0.0
+      - squidpy==1.8.3               # baselines (Figs. 3, 6)
+      - spatialdata==0.8.0
+      - tacco==0.5.0                 # cell-level co-occurrence comparator (Fig. 6)
+      - torch==2.14.0                # GPU rules only (Fig. 6 GPU rows, Fig. S3 runs); install the CUDA build that matches your driver

@@ -1,0 +1,236 @@
+# Data sets of the preprint figures for workflows/fetch.smk: URL, archive name, size, license, archive members to extract
+# (glob on the path inside the archive) and platform (selects the converter). Entries with `manual_download: true` have no
+# direct link: the workflow stops with a message that points to the vendor landing page given as `url`.
+delete_archives: false     # set true on small disks once extraction and conversion succeeded
+min_free_frac: 0.05        # never let the data volume drop below this fraction free
+
+datasets:
+  # 10x Genomics CRC serial sections, patients P1, P2, P5 (Oliveira et al. 2025; preprint Figs. 1, 2, 4, 5, 6, S1)
+  xenium_crc_p1:
+    platform: xenium
+    url: https://cf.10xgenomics.com/samples/xenium/2.0.0/Xenium_V1_Human_Colon_Cancer_P1_CRC_Add_on_FFPE/Xenium_V1_Human_Colon_Cancer_P1_CRC_Add_on_FFPE_outs.zip
+    archive: outs.zip
+    size_gb: 13.0
+    license: CC BY 4.0
+    members: [transcripts.parquet, cells.parquet, cell_boundaries.parquet, nucleus_boundaries.parquet, cell_feature_matrix.h5, experiment.xenium, gene_panel.json, analysis.zarr.zip]
+  xenium_crc_p2:
+    platform: xenium
+    url: https://cf.10xgenomics.com/samples/xenium/2.0.0/Xenium_V1_Human_Colon_Cancer_P2_CRC_Add_on_FFPE/Xenium_V1_Human_Colon_Cancer_P2_CRC_Add_on_FFPE_outs.zip
+    archive: outs.zip
+    size_gb: 15.87
+    license: CC BY 4.0
+    members: [transcripts.parquet, cells.parquet, cell_boundaries.parquet, nucleus_boundaries.parquet, cell_feature_matrix.h5, experiment.xenium, gene_panel.json, analysis.zarr.zip]
+  xenium_crc_p5:
+    platform: xenium
+    url: https://cf.10xgenomics.com/samples/xenium/2.0.0/Xenium_V1_Human_Colon_Cancer_P5_CRC_Add_on_FFPE/Xenium_V1_Human_Colon_Cancer_P5_CRC_Add_on_FFPE_outs.zip
+    archive: outs.zip
+    size_gb: 13.8
+    license: CC BY 4.0
+    members: [transcripts.parquet, cells.parquet, cell_boundaries.parquet, nucleus_boundaries.parquet, cell_feature_matrix.h5, experiment.xenium, gene_panel.json, analysis.zarr.zip]
+  hd_crc_p1:
+    platform: visium_hd
+    url: https://cf.10xgenomics.com/samples/spatial-exp/3.0.0/Visium_HD_Human_Colon_Cancer_P1/Visium_HD_Human_Colon_Cancer_P1_binned_outputs.tar.gz
+    archive: binned_outputs.tar.gz
+    size_gb: 12.32
+    license: CC BY 4.0
+    members: [binned_outputs/square_002um/*, binned_outputs/square_008um/*, binned_outputs/square_016um/*]
+  hd_crc_p2:
+    platform: visium_hd
+    url: https://cf.10xgenomics.com/samples/spatial-exp/3.0.0/Visium_HD_Human_Colon_Cancer_P2/Visium_HD_Human_Colon_Cancer_P2_binned_outputs.tar.gz
+    archive: binned_outputs.tar.gz
+    size_gb: 15.89
+    license: CC BY 4.0
+    members: [binned_outputs/square_002um/*, binned_outputs/square_008um/*, binned_outputs/square_016um/*]
+  hd_crc_p5:
+    platform: visium_hd
+    url: https://cf.10xgenomics.com/samples/spatial-exp/3.0.0/Visium_HD_Human_Colon_Cancer_P5/Visium_HD_Human_Colon_Cancer_P5_binned_outputs.tar.gz
+    archive: binned_outputs.tar.gz
+    size_gb: 16.57
+    license: CC BY 4.0
+    members: [binned_outputs/square_002um/*, binned_outputs/square_008um/*, binned_outputs/square_016um/*]
+  v2_crc_p2:
+    platform: visium
+    url: https://cf.10xgenomics.com/samples/spatial-exp/3.0.0/Visium_V2_Human_Colon_Cancer_P2/Visium_V2_Human_Colon_Cancer_P2_filtered_feature_bc_matrix.h5
+    archive: filtered_feature_bc_matrix.h5
+    extra_urls: {spatial.tar.gz: 'https://cf.10xgenomics.com/samples/spatial-exp/3.0.0/Visium_V2_Human_Colon_Cancer_P2/Visium_V2_Human_Colon_Cancer_P2_spatial.tar.gz'}
+    size_gb: 0.09
+    license: CC BY 4.0
+    members: [spatial/*]
+  # 10x Genomics Xenium Prime 5K human lymph node (Figs. 4, 6)
+  x5k_lymph_node:
+    platform: xenium
+    url: https://cf.10xgenomics.com/samples/xenium/3.0.0/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE_outs.zip
+    archive: outs.zip
+    size_gb: 22.56
+    license: CC BY 4.0
+    members: [transcripts.parquet, cells.parquet, cell_boundaries.parquet, nucleus_boundaries.parquet, cell_feature_matrix.h5, experiment.xenium, gene_panel.json, analysis.zarr.zip]
+  # SpatialBench mouse spleen, WT vs Tbx21-KO vs Ctrl (EBI BioStudies S-BSST2361; Figs. 3, S2)
+  sb_xenium_WT709_rep1:
+    platform: xenium
+    url: https://ftp.ebi.ac.uk/biostudies/fire/S-BSST/361/S-BSST2361/Files/Xenium/WT709-rep1.zip
+    archive: WT709-rep1.zip
+    size_gb: 4.97
+    license: CC BY 4.0 (preprint)
+    members: ['*transcripts.parquet', '*cells.parquet', '*cell_boundaries.parquet', '*nucleus_boundaries.parquet', '*cell_feature_matrix.h5', '*experiment.xenium', '*gene_panel.json']
+  sb_xenium_WT713:
+    platform: xenium
+    url: https://ftp.ebi.ac.uk/biostudies/fire/S-BSST/361/S-BSST2361/Files/Xenium/WT713.zip
+    archive: WT713.zip
+    size_gb: 4.18
+    license: CC BY 4.0 (preprint)
+    members: ['*transcripts.parquet', '*cells.parquet', '*cell_boundaries.parquet', '*nucleus_boundaries.parquet', '*cell_feature_matrix.h5', '*experiment.xenium', '*gene_panel.json']
+  sb_xenium_WT710_rep1:
+    platform: xenium
+    url: https://ftp.ebi.ac.uk/biostudies/fire/S-BSST/361/S-BSST2361/Files/Xenium/WT710-rep1.zip
+    archive: WT710-rep1.zip
+    size_gb: 3.37
+    license: CC BY 4.0 (preprint)
+    members: ['*transcripts.parquet', '*cells.parquet', '*cell_boundaries.parquet', '*nucleus_boundaries.parquet', '*cell_feature_matrix.h5', '*experiment.xenium', '*gene_panel.json']
+  sb_xenium_KO166:
+    platform: xenium
+    url: https://ftp.ebi.ac.uk/biostudies/fire/S-BSST/361/S-BSST2361/Files/Xenium/KO166.zip
+    archive: KO166.zip
+    size_gb: 4.63
+    license: CC BY 4.0 (preprint)
+    members: ['*transcripts.parquet', '*cells.parquet', '*cell_boundaries.parquet', '*nucleus_boundaries.parquet', '*cell_feature_matrix.h5', '*experiment.xenium', '*gene_panel.json']
+  sb_xenium_KO167:
+    platform: xenium
+    url: https://ftp.ebi.ac.uk/biostudies/fire/S-BSST/361/S-BSST2361/Files/Xenium/KO167.zip
+    archive: KO167.zip
+    size_gb: 3.58
+    license: CC BY 4.0 (preprint)
+    members: ['*transcripts.parquet', '*cells.parquet', '*cell_boundaries.parquet', '*nucleus_boundaries.parquet', '*cell_feature_matrix.h5', '*experiment.xenium', '*gene_panel.json']
+  sb_xenium_KO168:
+    platform: xenium
+    url: https://ftp.ebi.ac.uk/biostudies/fire/S-BSST/361/S-BSST2361/Files/Xenium/KO168.zip
+    archive: KO168.zip
+    size_gb: 3.66
+    license: CC BY 4.0 (preprint)
+    members: ['*transcripts.parquet', '*cells.parquet', '*cell_boundaries.parquet', '*nucleus_boundaries.parquet', '*cell_feature_matrix.h5', '*experiment.xenium', '*gene_panel.json']
+  sb_xenium_Ctrl172_rep1:
+    platform: xenium
+    url: https://ftp.ebi.ac.uk/biostudies/fire/S-BSST/361/S-BSST2361/Files/Xenium/Ctrl172-rep1.zip
+    archive: Ctrl172-rep1.zip
+    size_gb: 2.46
+    license: CC BY 4.0 (preprint)
+    members: ['*transcripts.parquet', '*cells.parquet', '*cell_boundaries.parquet', '*nucleus_boundaries.parquet', '*cell_feature_matrix.h5', '*experiment.xenium', '*gene_panel.json']
+  sb_xenium_Ctrl173_rep1:
+    platform: xenium
+    url: https://ftp.ebi.ac.uk/biostudies/fire/S-BSST/361/S-BSST2361/Files/Xenium/Ctrl173-rep1.zip
+    archive: Ctrl173-rep1.zip
+    size_gb: 2.28
+    license: CC BY 4.0 (preprint)
+    members: ['*transcripts.parquet', '*cells.parquet', '*cell_boundaries.parquet', '*nucleus_boundaries.parquet', '*cell_feature_matrix.h5', '*experiment.xenium', '*gene_panel.json']
+  sb_xenium_Ctrl174_rep1:
+    platform: xenium
+    url: https://ftp.ebi.ac.uk/biostudies/fire/S-BSST/361/S-BSST2361/Files/Xenium/Ctrl174-rep1.zip
+    archive: Ctrl174-rep1.zip
+    size_gb: 3.24
+    license: CC BY 4.0 (preprint)
+    members: ['*transcripts.parquet', '*cells.parquet', '*cell_boundaries.parquet', '*nucleus_boundaries.parquet', '*cell_feature_matrix.h5', '*experiment.xenium', '*gene_panel.json']
+  sb_hd_WT709:
+    platform: visium_hd
+    url: https://ftp.ebi.ac.uk/biostudies/fire/S-BSST/361/S-BSST2361/Files/VisiumHD/WT709.tar.gz
+    archive: WT709.tar.gz
+    size_gb: 65.2
+    license: CC BY 4.0 (preprint)
+    members: ['*square_002um/*', '*square_008um/*', '*square_016um/*']
+  sb_hd_KO168:
+    platform: visium_hd
+    url: https://ftp.ebi.ac.uk/biostudies/fire/S-BSST/361/S-BSST2361/Files/VisiumHD/KO168.tar.gz
+    archive: KO168.tar.gz
+    size_gb: 59.93
+    license: CC BY 4.0 (preprint)
+    members: ['*square_002um/*', '*square_008um/*', '*square_016um/*']
+  sb_merscope_WT709:
+    platform: merscope
+    url: https://ftp.ebi.ac.uk/biostudies/fire/S-BSST/361/S-BSST2361/Files/MERSCOPE/WT709/WT709.zip
+    archive: WT709.zip
+    size_gb: 20.62
+    license: CC BY 4.0 (preprint)
+    members: ['*detected_transcripts.csv*', '*cell_metadata*', '*cell_boundaries*']
+  # Vizgen MERFISH Mouse Liver Map (Figs. 4, 6). Not redistributable; download it yourself from the vendor landing page
+# and place detected_transcripts.csv.gz of each slice under data/archives/<dataset>/ (README.md, 'Data sources').
+  vizgen_liver1slice1:
+    platform: merscope
+    url: https://info.vizgen.com/mouse-liver-access
+    archive: detected_transcripts.csv.gz
+    manual_download: true
+    size_gb: 30
+    license: Vizgen data release terms (registration on the vendor page; not redistributable)
+    members: ['*']
+  vizgen_liver1slice2:
+    platform: merscope
+    url: https://info.vizgen.com/mouse-liver-access
+    archive: detected_transcripts.csv.gz
+    manual_download: true
+    size_gb: 30
+    license: Vizgen data release terms (registration on the vendor page; not redistributable)
+    members: ['*']
+  vizgen_liver2slice1:
+    platform: merscope
+    url: https://info.vizgen.com/mouse-liver-access
+    archive: detected_transcripts.csv.gz
+    manual_download: true
+    size_gb: 30
+    license: Vizgen data release terms (registration on the vendor page; not redistributable)
+    members: ['*']
+  vizgen_liver2slice2:
+    platform: merscope
+    url: https://info.vizgen.com/mouse-liver-access
+    archive: detected_transcripts.csv.gz
+    manual_download: true
+    size_gb: 30
+    license: Vizgen data release terms (registration on the vendor page; not redistributable)
+    members: ['*']
+  # 10x Genomics fresh-frozen ovarian cancer serial sections, Xenium Prime 5K and Visium HD probe-based at two depths (Fig. S3)
+  ovff_xenium_5k:
+    platform: xenium
+    url: https://s3-us-west-2.amazonaws.com/10x.files/samples/xenium/4.0.0/Xenium_Prime_Human_Ovary_Cancer_FF/Xenium_Prime_Human_Ovary_Cancer_FF_outs.zip
+    archive: outs.zip
+    extra_urls: {he_image.ome.tif: 'https://cf.10xgenomics.com/samples/xenium/4.0.0/Xenium_Prime_Human_Ovary_Cancer_FF/Xenium_Prime_Human_Ovary_Cancer_FF_he_image.ome.tif', he_imagealignment.csv: 'https://cf.10xgenomics.com/samples/xenium/4.0.0/Xenium_Prime_Human_Ovary_Cancer_FF/Xenium_Prime_Human_Ovary_Cancer_FF_he_imagealignment.csv',
+      gene_panel.json: 'https://cf.10xgenomics.com/samples/xenium/4.0.0/Xenium_Prime_Human_Ovary_Cancer_FF/Xenium_Prime_Human_Ovary_Cancer_FF_gene_panel.json'}
+    size_gb: 29.3
+    license: CC BY 4.0
+    members: [transcripts.parquet, cells.parquet, cell_boundaries.parquet, nucleus_boundaries.parquet, cell_feature_matrix.h5, experiment.xenium, gene_panel.json, analysis.zarr.zip]
+  ovff_hd_probe_deep:
+    platform: visium_hd
+    url: https://s3-us-west-2.amazonaws.com/10x.files/samples/spatial-exp/4.0.1/Visium_HD_Human_Ovarian_Cancer_FF/Visium_HD_Human_Ovarian_Cancer_FF_binned_outputs.tar.gz
+    archive: binned_outputs.tar.gz
+    extra_urls: {segmented_outputs.tar.gz: 'https://cf.10xgenomics.com/samples/spatial-exp/4.0.1/Visium_HD_Human_Ovarian_Cancer_FF/Visium_HD_Human_Ovarian_Cancer_FF_segmented_outputs.tar.gz', spatial.tar.gz: 'https://cf.10xgenomics.com/samples/spatial-exp/4.0.1/Visium_HD_Human_Ovarian_Cancer_FF/Visium_HD_Human_Ovarian_Cancer_FF_spatial.tar.gz',
+      metrics_summary.csv: 'https://cf.10xgenomics.com/samples/spatial-exp/4.0.1/Visium_HD_Human_Ovarian_Cancer_FF/Visium_HD_Human_Ovarian_Cancer_FF_metrics_summary.csv', web_summary.html: 'https://cf.10xgenomics.com/samples/spatial-exp/4.0.1/Visium_HD_Human_Ovarian_Cancer_FF/Visium_HD_Human_Ovarian_Cancer_FF_web_summary.html',
+      barcode_mappings.parquet: 'https://cf.10xgenomics.com/samples/spatial-exp/4.0.1/Visium_HD_Human_Ovarian_Cancer_FF/Visium_HD_Human_Ovarian_Cancer_FF_barcode_mappings.parquet',
+      tissue_image.btf: 'https://cf.10xgenomics.com/samples/spatial-exp/4.0.1/Visium_HD_Human_Ovarian_Cancer_FF/Visium_HD_Human_Ovarian_Cancer_FF_tissue_image.btf'}
+    size_gb: 23.7
+    license: CC BY 4.0
+    members: ['*square_002um/*', '*square_008um/*', '*square_016um/*']
+  ovff_hd_probe_min:
+    platform: visium_hd
+    url: https://cf.10xgenomics.com/samples/spatial-exp/4.0.1/Visium_HD_Human_Ovarian_Cancer_FF_Min_Depth/Visium_HD_Human_Ovarian_Cancer_FF_Min_Depth_binned_outputs.tar.gz
+    archive: binned_outputs.tar.gz
+    extra_urls: {segmented_outputs.tar.gz: 'https://cf.10xgenomics.com/samples/spatial-exp/4.0.1/Visium_HD_Human_Ovarian_Cancer_FF_Min_Depth/Visium_HD_Human_Ovarian_Cancer_FF_Min_Depth_segmented_outputs.tar.gz',
+      spatial.tar.gz: 'https://cf.10xgenomics.com/samples/spatial-exp/4.0.1/Visium_HD_Human_Ovarian_Cancer_FF_Min_Depth/Visium_HD_Human_Ovarian_Cancer_FF_Min_Depth_spatial.tar.gz', metrics_summary.csv: 'https://cf.10xgenomics.com/samples/spatial-exp/4.0.1/Visium_HD_Human_Ovarian_Cancer_FF_Min_Depth/Visium_HD_Human_Ovarian_Cancer_FF_Min_Depth_metrics_summary.csv',
+      web_summary.html: 'https://cf.10xgenomics.com/samples/spatial-exp/4.0.1/Visium_HD_Human_Ovarian_Cancer_FF_Min_Depth/Visium_HD_Human_Ovarian_Cancer_FF_Min_Depth_web_summary.html', barcode_mappings.parquet: 'https://cf.10xgenomics.com/samples/spatial-exp/4.0.1/Visium_HD_Human_Ovarian_Cancer_FF_Min_Depth/Visium_HD_Human_Ovarian_Cancer_FF_Min_Depth_barcode_mappings.parquet'}
+    size_gb: 10.7
+    license: CC BY 4.0
+    members: ['*square_002um/*', '*square_008um/*', '*square_016um/*']
+  # 10x Genomics Atera whole-transcriptome preview, FFPE cervical cancer (Fig. 6); converted by python -m scote convert --platform atera
+  atera_cervical:
+    platform: atera
+    url: https://s3-us-west-2.amazonaws.com/10x.files/samples/atera/dev/WTA_Preview_FFPE_Cervical_Cancer/WTA_Preview_FFPE_Cervical_Cancer_xe_outs.zip
+    archive: xe_outs.zip
+    size_gb: 67.78
+    license: CC BY 4.0
+    members: [transcripts.zarr.zip, cells.zarr.zip, cell_feature_matrix.zarr.zip, analysis.zarr.zip, experiment.xenium, analysis_summary.html]
+  # Element Biosciences AVITI24 / Cytos A549 multimodal pooled CRISPR screen (Fig. S4b). Download the SpatialData zarr zip
+# yourself from the vendor landing page and place it as data/archives/aviti24_a549_screen/cytos_a549_screen.zarr.zip
+# (README.md, 'Data sources'). It is read in place, never extracted.
+  aviti24_a549_screen:
+    platform: aviti24
+    url: https://www.elementbiosciences.com/resources/dataset-explore-multimodal-pooled-screening-on-aviti24
+    archive: cytos_a549_screen.zarr.zip
+    manual_download: true
+    size_gb: 117.5
+    license: Element Biosciences data set page
+    members: []
+    no_extract: true

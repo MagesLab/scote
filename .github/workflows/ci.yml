@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    # numba's default thread count (one per CPU of the runner) on every Python version, and one leg with a single thread
+    name: tests (Python ${{ matrix.python-version }}, ${{ matrix.threads }} threads)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+        threads: ["default"]
+        include:
+          - python-version: "3.12"
+            threads: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Thread count
+        if: matrix.threads != 'default'
+        run: echo "NUMBA_NUM_THREADS=${{ matrix.threads }}" >> "$GITHUB_ENV"
+      - name: Install the package (without PyTorch and TACCO, so their tests skip)
+        run: python -m pip install --upgrade pip && python -m pip install . pytest
+      - name: Smoke import of the installed package
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -c "import scote, scote.io, scote.uncertainty; assert callable(scote.twopoint); print('scote', scote.__version__)"
+          python -m scote --help > /dev/null
+      - name: Tests
+        run: python -m pytest -q -rs
+      - name: README quick start
+        working-directory: ${{ runner.temp }}
+        run: |
+          python - "$GITHUB_WORKSPACE/README.md" <<'PY'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          section = text.split("<!-- quickstart-start -->")[1].split("<!-- quickstart-end -->")[0]
+          code = re.search(r"```python\n(.*?)```", section, re.S).group(1)
+          exec(compile(code, "README quick start", "exec"), {})
+          PY
+
+  tests-torch:
+    # the GPU backend on the torch CPU device: the CPU and GPU backends must give the same counts
+    name: tests with PyTorch (CPU build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install the package with the test and io extras (PyTorch from the CPU index)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[test,io]" --extra-index-url https://download.pytorch.org/whl/cpu
+          python -c "import torch; print('torch', torch.__version__, 'CUDA available:', torch.cuda.is_available())"
+      - name: Tests
+        run: python -m pytest -q -rs
+
+  tests-tacco:
+    # the comparisons with TACCO's co-occurrence code, which skip without TACCO
+    name: tests with TACCO
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install the package with TACCO
+        run: python -m pip install --upgrade pip && python -m pip install . pytest tacco
+      - name: Tests
+        run: python -m pytest -q -rs
+
+  size-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: No large files, data files, notebooks with outputs, or Git LFS
+        run: |
+          python - <<'PY'
+          import json, os, subprocess, sys
+          files = subprocess.run(["git", "ls-files", "-z"], capture_output=True, text=True, check=True).stdout.split("\0")
+          files = [f for f in files if f]
+          allow = set()
+          if os.path.exists(".github/size_allowlist.txt"):
+              allow = {l.strip() for l in open(".github/size_allowlist.txt") if l.strip() and not l.startswith("#")}
+          errors = []
+          for f in files:
+              low = f.lower()
+              if os.path.getsize(f) > 1_000_000 and f not in allow:
+                  errors.append(f"{f}: {os.path.getsize(f) / 1e6:.1f} MB > 1 MB (not in .github/size_allowlist.txt)")
+              if low.endswith((".parquet", ".npz", ".h5ad")) or ".zarr/" in low or low.endswith((".zarr", ".zarr.zip")):
+                  errors.append(f"{f}: data file type not allowed in the repository")
+              if low.endswith(".ipynb"):
+                  nb = json.load(open(f))
+                  if any(c.get("outputs") or c.get("execution_count") for c in nb.get("cells", [])):
+                      errors.append(f"{f}: notebook with outputs (strip the outputs)")
+          for attr in [f for f in files if os.path.basename(f) == ".gitattributes"]:
+              if "filter=lfs" in open(attr).read():
+                  errors.append(f"{attr}: Git LFS is not used in this repository")
+          print("\n".join(errors) if errors else f"size guard: {len(files)} tracked files OK")
+          sys.exit(1 if errors else 0)
+          PY
+
+  examples-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Snakemake and pytest
+        run: python -m pip install --upgrade pip && python -m pip install "snakemake>=9" numpy pytest
+      - name: Dry run of the examples driver (parse and DAG check, nothing is executed)
+        run: snakemake -n -s examples/Snakefile --directory examples
+      - name: Tests of the example scripts
+        working-directory: examples
+        run: python -m pytest -q tests
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install the package with the docs extra
+        run: python -m pip install --upgrade pip && python -m pip install ".[docs]"
+      - name: Sphinx build, warnings as errors
+        run: python -m sphinx -W --keep-going -b html docs docs/_build/html

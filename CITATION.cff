@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the preprint below."
+title: "SCOTE: scale-resolved two-point correlation functions for spatial omics"
+type: software
+version: 0.1.0
+license: BSD-3-Clause
+repository-code: "https://github.com/MagesLab/scote"
+url: "https://mageslab.github.io/scote"
+authors:
+  - family-names: Mages
+    given-names: Simon
+keywords:
+  - spatial omics
+  - spatial transcriptomics
+  - correlation function
+  - pair correlation
+preferred-citation:
+  type: article
+  title: "Scale-resolved correlation functions unify spatial omics across platforms and resolutions"
+  authors:
+    - family-names: Ilin
+      given-names: Mykhailo
+    - family-names: Singh
+      given-names: Yerik
+    - family-names: Mages
+      given-names: Simon W.
+  journal: bioRxiv
+  year: 2026
+  doi: "10.64898/2026.10.09.757915"
+  url: "https://doi.org/10.64898/2026.10.09.757915"

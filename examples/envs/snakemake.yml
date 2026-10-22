@@ -1,0 +1,9 @@
+# Environment that runs Snakemake (the rules run in envs/scote.yml, which Snakemake creates with --sdm conda):
+#   conda env create -f envs/snakemake.yml && conda activate scote-snakemake
+name: scote-snakemake
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.12
+  - snakemake=9.26.1

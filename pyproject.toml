@@ -1,0 +1,48 @@
+[project]
+name = "scote"
+version = "0.1.0"
+description = "SCOTE: scale-resolved two-point correlation functions for spatial omics (molecule tables and bin tables; import name `scote`)"
+readme = "README.md"
+authors = [{ name = "Simon Mages" }]
+license = "BSD-3-Clause"
+license-files = ["LICENSE", "NOTICES.md"]
+requires-python = ">=3.11"
+keywords = ["spatial omics", "spatial transcriptomics", "correlation function", "pair correlation", "Xenium", "MERFISH", "Visium HD"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+  "numpy>=2.2", "scipy>=1.15", "pandas>=2.2", "pyarrow>=19", "numba>=0.61.2", "threadpoolctl>=3.1",
+]
+
+[project.optional-dependencies]
+gpu = ["torch"]
+io = ["scanpy", "anndata", "zarr>=3", "numcodecs", "h5py"]
+docs = ["sphinx>=8", "myst-parser>=4", "sphinx-rtd-theme>=3", "sphinx-copybutton>=0.5"]
+dev = ["pytest"]
+# the test suite including the GPU-backend tests, which run on the torch CPU device; for a CPU-only torch install with
+# pip install ".[test]" --extra-index-url https://download.pytorch.org/whl/cpu
+test = ["pytest", "torch"]
+
+[project.urls]
+Homepage = "https://github.com/MagesLab/scote"
+Documentation = "https://mageslab.github.io/scote"
+Repository = "https://github.com/MagesLab/scote"
+Preprint = "https://doi.org/10.64898/2026.10.09.757915"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["scote*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

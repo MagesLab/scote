@@ -1,0 +1,6 @@
+# Host overlay, passed after datasets.yaml: free-space floor of the data volume (downloads never let it drop below) and the
+# directory for the full outputs of the benchmark rows of Fig. 6 (up to about 400 GB, removed after each row).
+# All data go to data/ in the examples root (about 1 TB): make data/ a link to a large volume.
+min_free_frac: 0.05
+min_free_gb: 500
+bench_write_dir: data/bench/write

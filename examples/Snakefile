@@ -1,0 +1,532 @@
+# Workflow of the SCOTE examples: from the public data to every table and figure of the methods preprint
+# (https://doi.org/10.64898/2026.10.09.757915). Run from this directory (the examples root), with Snakemake from
+# envs/snakemake.yml; every rule runs in the conda environment ENV_SCOTE (envs/scote.yml), which Snakemake creates,
+# and imports scote from SCOTE_SRC, the src/ of this checkout:
+#
+#   snakemake -n TARGET                                     # dry run: what would be computed
+#   snakemake --sdm conda --configfile config/datasets.yaml config/host.yaml -j 4 --resources gpu=1 TARGET
+#
+# Targets: all (every figure), fig1 ... fig6, figS1 ... figS4 (preprint numbering), convert_all (download and conversion),
+# twopoint_all (the two-point runs), bench_all (the compute benchmark of Fig. 6). Data, intermediates and the two-point
+# tensors go to data/ (about 1 TB; make data/ a link to a large volume), tables to results/, figures to figures/; none of
+# them is part of the repository. Every rule declares threads, memory and run time, and writes its stdout and stderr to
+# its log in logs/.
+import shlex
+from pathlib import Path
+
+from snakemake.exceptions import WorkflowError
+from snakemake.utils import min_version
+
+min_version("8")
+
+from snakemake.settings.types import DeploymentMethod
+
+configfile: "config/datasets.yaml"
+configfile: "config/host.yaml"
+
+# the conda environment of the rules; a rule that needs other packages gets an environment file of its own
+ENV_SCOTE = str(Path(workflow.basedir) / "envs" / "scote.yml")
+# Snakemake removes PYTHONPATH from the environment of conda rules, so every shell command exports it (the prefix keeps
+# Snakemake's default "set -euo pipefail")
+SCOTE_SRC = Path(workflow.basedir).resolve().parent / "src"
+shell.prefix(f"set -euo pipefail; export PYTHONPATH={shlex.quote(str(SCOTE_SRC))}; ")
+
+include: "workflows/fetch.smk"
+include: "workflows/twopoint.smk"
+include: "workflows/bench.smk"
+
+onstart:
+    if DeploymentMethod.CONDA not in workflow.deployment_settings.deployment_method:
+        raise WorkflowError("the rules run in conda environments: add --sdm conda (or --use-conda) to the snakemake command")
+    if not (SCOTE_SRC / "scote" / "__init__.py").is_file():
+        raise WorkflowError(f"the rules import scote from {SCOTE_SRC}, which has no scote package: run the workflow from "
+                            "the examples/ directory of a scote checkout")
+
+DATA = Path("data")
+TP = str(DATA / "twopoint")
+QL = "figures/quicklook"
+CRC = ["p1", "p2", "p5"]
+LIVER = ["1slice1", "1slice2", "2slice1", "2slice2"]
+WELLS = [f"{r}{c}" for r in "ABCDEF" for c in "12"]        # AVITI24 wells (pedestal and panel: all twelve)
+BASELINE = WELLS[:6]                                       # A1-C2, the baseline wells of the z-projection
+AVITI24_ZIP = str(DATA / "archives/aviti24_a549_screen/cytos_a549_screen.zarr.zip")
+KIDNEY_RAW = str(DATA / "raw/cosmx_kidney_gse282059")
+KIDNEY_PIECE = str(DATA / "processed/cosmx_kidney_gse282059/piece_2")
+GEO = "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE282nnn/GSE282059/suppl"
+SPLEEN_OPS = "config/operators_spleen.yaml"
+SPLEEN_SECTIONS = ["sb_xenium_WT709_rep1", "sb_xenium_WT713", "sb_xenium_WT710_rep1", "sb_xenium_KO166", "sb_xenium_KO168",
+                   "sb_xenium_KO167", "sb_xenium_Ctrl172_rep1", "sb_xenium_Ctrl173_rep1", "sb_xenium_Ctrl174_rep1"]
+
+FIGURES = {"fig1": "fig1_schematic", "fig2": "fig2_platform_invariance", "fig3": "fig3_added_value",
+           "fig4": "fig4_error_scaling", "fig5": "fig5_artifacts", "fig6": "fig6_compute",
+           "figS1": "figS1_v2_scatter", "figS2": "figS2_spleen_platform_invariance", "figS3": "figS3_depth",
+           "figS4": "figS4_subcellular"}
+
+localrules: all, fig1, fig2, fig3, fig4, fig5, fig6, figS1, figS2, figS3, figS4, bench_all, bench_scote_profile, bench_comparators
+
+rule all:
+    input: expand("figures/{f}.pdf", f=FIGURES.values())
+
+for _t, _f in FIGURES.items():
+    rule:
+        name: _t
+        input: f"figures/{_f}.pdf"
+
+def molecules(ds): return str(DATA / "processed" / ds / "molecules.parquet")
+def bins2(ds): return str(DATA / "processed" / ds / "bins_square_002um.npz")
+
+# ------------------------------------------------------------------ gene panels (scripts/gene_panel.py)
+rule genes_crc:
+    # the 408 genes common to the Xenium, Visium HD and Visium v2 sections of CRC P2
+    input: molecules("xenium_crc_p2"), bins2("hd_crc_p2"), str(DATA / "processed/v2_crc_p2/bins_spots55um.npz")
+    output: "results/platforms/common_genes_crc.txt"
+    log: "logs/genes/genes_crc.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=8000, runtime=20
+    shell: "python scripts/gene_panel.py common --molecules {input[0]} --bins {input[1]} {input[2]} --out {output} > {log} 2>&1"
+
+rule genes_spleen:
+    # the 90 genes common to the Xenium, MERSCOPE and Visium HD sections of WT709
+    input: molecules("sb_xenium_WT709_rep1"), molecules("sb_merscope_WT709"), bins2("sb_hd_WT709")
+    output: "results/platforms/common_genes_spleen.txt"
+    log: "logs/genes/genes_spleen.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=8000, runtime=20
+    shell: "python scripts/gene_panel.py common --molecules {input[0]} {input[1]} --bins {input[2]} --out {output} > {log} 2>&1"
+
+rule genes_liver:
+    # the top-200 genes of liver slice 1 (the features of its run), used on the other three slices
+    input: TP + "/error_scaling/vizgen_liver1slice1_bin2um_top200.npz"
+    output: "results/error_scaling/vizgen_liver_top200_genes.txt"
+    log: "logs/genes/genes_liver.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=4000, runtime=10
+    shell: "python scripts/gene_panel.py features --npz {input} --out {output} > {log} 2>&1"
+
+rule genes_aviti24:
+    # the 1,000 most abundant 3' genes of the AVITI24 screen present in all twelve wells
+    input: expand(str(DATA / "processed/aviti24_{w}/molecules.parquet"), w=WELLS)
+    output: "results/aviti24/common_genes_1000.txt"
+    log: "logs/genes/genes_aviti24.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=16000, runtime=60
+    shell: "python scripts/gene_panel.py aviti24 --molecules {input} --top 1000 --out {output} > {log} 2>&1"
+
+rule genes_kidney_aviti24:
+    # the CosMx kidney top-1000 genes that are also in the AVITI24 panel, in CosMx order (Fig. S4a)
+    input: KIDNEY_PIECE, "results/aviti24/common_genes_1000.txt"
+    output: "results/cosmx_kidney/common_genes_matched_aviti24.txt"
+    log: "logs/genes/genes_kidney_aviti24.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=16000, runtime=30
+    shell: "python scripts/gene_panel.py matched --cosmx-dir {input[0]} --panel {input[1]} --top 1000 --out {output} > {log} 2>&1"
+
+# ------------------------------------------------------------------ Fig. 1 (schematic) and Fig. 2, Figs. S1, S2
+rule make_fig1:
+    input: molecules("xenium_crc_p2"), TP + "/xenium_crc_p2_mol_common.npz",
+           expand(TP + "/{p}_crc_{s}_bin2um_common.npz", p=["xenium"], s=["p1", "p2"]), TP + "/hd_crc_p2_bin2um_common.npz"
+    output: "figures/fig1_schematic.pdf", "figures/fig1_schematic.png"
+    log: "logs/figures/make_fig1.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=8000, runtime=20
+    shell: "python figures/make_fig1.py > {log} 2>&1"
+
+rule scatter_stats:
+    # Pearson / line-fit statistics with closed-form intervals of every method-method scatter (Fig. 2b, Figs. S1, S2b)
+    input: TP + "/xenium_crc_p2_mol_common.npz", TP + "/hd_crc_p2_bin2um_common.npz", TP + "/v2_crc_p2_spots_common.npz",
+           expand(TP + "/{ds}_bin2um_common.npz", ds=["sb_xenium_WT709_rep1", "sb_hd_WT709", "sb_merscope_WT709"])
+    output: "results/platforms/scatter_stats.json"
+    log: "logs/platforms/scatter_stats.log"
+    conda: ENV_SCOTE
+    threads: 4
+    resources: mem_mb=96000, runtime=240
+    shell: "python scripts/scatter_stats.py > {log} 2>&1"
+
+rule crc_replicates:
+    input: expand(TP + "/{p}_crc_{s}_bin2um_common.npz", p=["xenium", "hd"], s=CRC)
+    output: "results/platforms/crc_replicates.json"
+    log: "logs/platforms/crc_replicates.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=32000, runtime=60
+    shell: "python scripts/crc_replicates.py > {log} 2>&1"
+
+rule spleen_replicates:
+    input: expand(TP + "/{ds}_bin2um_common.npz", ds=["sb_xenium_WT709_rep1", "sb_xenium_KO168", "sb_hd_WT709", "sb_hd_KO168", "sb_merscope_WT709"])
+    output: "results/platforms/spleen_replicates.json"
+    log: "logs/platforms/spleen_replicates.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=32000, runtime=60
+    shell: "python scripts/spleen_platforms.py replicates > {log} 2>&1"
+
+rule make_fig2:
+    input: "results/platforms/scatter_stats.json", "results/platforms/crc_replicates.json",
+           TP + "/xenium_crc_p2_mol_common.npz", TP + "/hd_crc_p2_bin2um_common.npz", TP + "/v2_crc_p2_spots_common.npz"
+    output: "figures/fig2_platform_invariance.pdf", "figures/fig2_platform_invariance.png", "results/platforms/fig2_pearson.json"
+    log: "logs/figures/make_fig2.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=8000, runtime=20
+    shell: "python figures/make_fig2.py > {log} 2>&1"
+
+rule make_figS1:
+    input: "results/platforms/scatter_stats.json",
+           TP + "/xenium_crc_p2_mol_common.npz", TP + "/hd_crc_p2_bin2um_common.npz", TP + "/v2_crc_p2_spots_common.npz"
+    output: "figures/figS1_v2_scatter.pdf", "figures/figS1_v2_scatter.png", "results/platforms/figS1_v2_pearson.json"
+    log: "logs/figures/make_figS1.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=8000, runtime=20
+    shell: "python figures/make_figS1.py > {log} 2>&1"
+
+rule make_figS2:
+    input: "results/platforms/scatter_stats.json", "results/platforms/spleen_replicates.json",
+           expand(TP + "/{ds}_bin2um_common.npz", ds=["sb_xenium_WT709_rep1", "sb_hd_WT709", "sb_merscope_WT709"])
+    output: "figures/figS2_spleen_platform_invariance.pdf", "figures/figS2_spleen_platform_invariance.png",
+            "results/platforms/figS2_spleen_pearson.json"
+    log: "logs/figures/make_figS2.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=4000, runtime=20
+    shell: "python figures/make_figS2.py > {log} 2>&1"
+
+# ------------------------------------------------------------------ Fig. 3: molecule level vs cell level on the spleen sections
+rule spleen_operators_run:
+    # operator labels and the molecule-level two-point run of one section (config/operators_spleen.yaml)
+    input: molecules("{section}"), SPLEEN_OPS
+    output: TP + "/spleen_operators/{section}.npz", "results/spleen_operators/{section}.json"
+    wildcard_constraints: section="|".join(SPLEEN_SECTIONS)
+    log: "logs/spleen_operators/run_{section}.log"
+    conda: ENV_SCOTE
+    threads: 4
+    resources: mem_mb=32000, runtime=120
+    shell: "python scripts/spleen_operators.py run --section {wildcards.section} --threads {threads} > {log} 2>&1"
+
+rule spleen_three_groups:
+    input: expand(TP + "/spleen_operators/{s}.npz", s=SPLEEN_SECTIONS), SPLEEN_OPS
+    output: "results/spleen_operators/three_groups.json", "results/spleen_operators/three_groups.md"
+    log: "logs/spleen_operators/three_groups.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=64000, runtime=60
+    shell: "python scripts/spleen_operators.py compare3 > {log} 2>&1"
+
+rule spleen_cells:
+    # cell typing of the segmented cells with the operator marker sets, Squidpy, and the centroid-level two-point run
+    input: str(DATA / "raw/{section}/.extracted"), SPLEEN_OPS
+    output: str(DATA / "twopoint/spleen_operators/cells_{section}.parquet"), str(DATA / "twopoint/spleen_operators/centroids_{section}.npz"),
+            "results/spleen_operators/cells_{section}.json", "results/spleen_operators/squidpy_{section}.json", "results/spleen_operators/centroids_{section}.json"
+    wildcard_constraints: section="|".join(SPLEEN_SECTIONS)
+    log: "logs/spleen_operators/cells_{section}.log"
+    conda: ENV_SCOTE
+    threads: 3
+    resources: mem_mb=64000, runtime=180
+    shell:
+        "(for st in cells squidpy centroids; do python scripts/spleen_cell_baselines.py $st --section {wildcards.section} "
+        "--threads {threads} || exit 1; done) > {log} 2>&1"
+
+rule spleen_baselines:
+    input: expand(TP + "/spleen_operators/{s}.npz", s=SPLEEN_SECTIONS), expand(TP + "/spleen_operators/centroids_{s}.npz", s=SPLEEN_SECTIONS),
+           expand("results/spleen_operators/{k}_{s}.json", k=["cells", "squidpy", "centroids"], s=SPLEEN_SECTIONS)
+    output: "results/spleen_operators/baseline_functions.json", "results/spleen_operators/baselines_compare.json"
+    log: "logs/spleen_operators/baselines.log"
+    conda: ENV_SCOTE
+    threads: 3
+    resources: mem_mb=64000, runtime=120
+    shell: "(python scripts/spleen_cell_baselines.py fit --threads {threads} && python scripts/spleen_cell_baselines.py compare --threads {threads}) > {log} 2>&1"
+
+rule make_fig3:
+    input: "results/spleen_operators/baseline_functions.json", "results/spleen_operators/baselines_compare.json", "results/spleen_operators/three_groups.json",
+           expand("results/spleen_operators/squidpy_{s}.json", s=SPLEEN_SECTIONS), expand(TP + "/spleen_operators/{s}.npz", s=SPLEEN_SECTIONS)
+    output: "figures/fig3_added_value.pdf", "figures/fig3_added_value.png", "results/spleen_operators/fig3_bracket_10um.json"
+    log: "logs/figures/make_fig3.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=4000, runtime=20
+    shell: "python figures/make_fig3.py > {log} 2>&1"
+
+# ------------------------------------------------------------------ Fig. 4: error scaling with area, molecules, replicates
+rule power_crc:
+    input: TP + "/xenium_crc_p2_bin2um_common.npz"
+    output: "results/error_scaling/xenium_crc_p2_top200.json"
+    log: "logs/error_scaling/power_xenium_crc_p2.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=64000, runtime=60
+    shell: "python scripts/error_vs_area.py --npz {input} --out {output} > {log} 2>&1"
+
+rule power_lymph_node:
+    input: TP + "/x5k_lymph_node_bin2um_top200.npz"
+    output: "results/error_scaling/x5k_lymph_node_top200.json"
+    log: "logs/error_scaling/power_x5k_lymph_node.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=64000, runtime=60
+    shell: "python scripts/error_vs_area.py --npz {input} --out {output} > {log} 2>&1"
+
+rule power_liver:
+    input: TP + "/error_scaling/vizgen_liver{s}_bin2um_top200.npz"
+    output: "results/error_scaling/vizgen_liver{s}_top200.json"
+    log: "logs/error_scaling/power_vizgen_liver{s}.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=64000, runtime=60
+    shell: "python scripts/error_vs_area.py --npz {input} --out {output} > {log} 2>&1"
+
+rule molecules_vs_area:
+    input: lambda w: [TP + "/xenium_crc_p2_bin2um_common.npz", "results/error_scaling/xenium_crc_p2_top200.json"]
+                     + expand(TP + "/error_scaling/xenium_crc_p2_bin2um_common_mol{m}.npz", m=MOL_FRACTIONS)
+                     if w.ds == "xenium_crc_p2" else
+                     [TP + "/x5k_lymph_node_bin2um_top200.npz", "results/error_scaling/x5k_lymph_node_top200.json"]
+                     + expand(TP + "/error_scaling/x5k_lymph_node_bin2um_top200_mol{m}.npz", m=MOL_FRACTIONS)
+    output: "results/error_scaling/{ds}_molecules.json"
+    wildcard_constraints: ds="xenium_crc_p2|x5k_lymph_node"
+    params: opt=lambda w: "" if w.ds == "xenium_crc_p2" else f"--dataset {w.ds}"
+    log: "logs/error_scaling/molecules_{ds}.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=64000, runtime=60
+    shell: "python scripts/error_vs_molecules.py {params.opt} > {log} 2>&1"
+
+rule replicates_crc:
+    input: "results/platforms/crc_replicates.json"
+    output: "results/error_scaling/replicates_sections.json"
+    log: "logs/error_scaling/replicates_crc.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=4000, runtime=10
+    shell: "python scripts/error_vs_replicates.py crc > {log} 2>&1"
+
+rule replicates_liver:
+    input: expand(TP + "/error_scaling/vizgen_liver{s}_bin2um_top200.npz", s=LIVER)
+    output: "results/error_scaling/replicates_liver.json"
+    log: "logs/error_scaling/replicates_liver.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=64000, runtime=60
+    shell: "python scripts/error_vs_replicates.py liver > {log} 2>&1"
+
+rule make_fig4:
+    input: "results/error_scaling/xenium_crc_p2_top200.json", "results/error_scaling/x5k_lymph_node_top200.json",
+           expand("results/error_scaling/vizgen_liver{s}_top200.json", s=LIVER),
+           "results/error_scaling/xenium_crc_p2_molecules.json", "results/error_scaling/x5k_lymph_node_molecules.json",
+           "results/error_scaling/replicates_sections.json", "results/error_scaling/replicates_liver.json"
+    output: "figures/fig4_error_scaling.pdf", "figures/fig4_error_scaling.png", "results/error_scaling/fig4_panel_c_slopes.json"
+    log: "logs/figures/make_fig4.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=4000, runtime=20
+    shell: "python figures/make_fig4.py > {log} 2>&1"
+
+# ------------------------------------------------------------------ Fig. 5: platform artifacts
+rule crc_regions:
+    # region operator (tumor / normal mucosa / stroma) on Xenium molecules and Visium HD bins, and the region-matched runs
+    input: molecules("xenium_crc_p2"), bins2("hd_crc_p2"), "results/platforms/common_genes_crc.txt"
+    output: str(DATA / "platforms/regions_xenium.npz"), str(DATA / "platforms/regions_hd.npz"),
+            expand(TP + "/regions/{p}_{r}.npz", p=["xenium", "hd"], r=["tumor", "normal", "stroma"])
+    log: "logs/platforms/crc_regions.log"
+    conda: ENV_SCOTE
+    threads: 4
+    resources: mem_mb=64000, runtime=240
+    shell: "(python scripts/crc_region_local.py regions && python scripts/crc_region_local.py twopoint) > {log} 2>&1"
+
+rule artifacts_collapse:
+    input: TP + "/xenium_crc_p2_mol_common.npz", "results/platforms/common_genes_crc.txt"
+    output: "results/artifacts/collapse.json"
+    log: "logs/artifacts/collapse.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=32000, runtime=60
+    shell: "python scripts/platform_artifacts.py collapse > {log} 2>&1"
+
+rule artifacts_acta2:
+    input: str(DATA / "raw/xenium_crc_p2/.extracted"), bins2("hd_crc_p2"), rules.crc_regions.output, "results/platforms/common_genes_crc.txt"
+    output: "results/artifacts/acta2.json", "results/artifacts/acta2_regions.json"
+    log: "logs/artifacts/acta2.log"
+    conda: ENV_SCOTE
+    threads: 4
+    resources: mem_mb=64000, runtime=120
+    shell: "(python scripts/platform_artifacts.py acta2 && python scripts/platform_artifacts.py regions) > {log} 2>&1"
+
+rule mastcells:
+    input: expand(TP + "/{p}_crc_{s}_bin2um_common.npz", p=["xenium", "hd"], s=CRC), TP + "/xenium_crc_p2_mol_common.npz",
+           str(DATA / "raw/xenium_crc_p2/.extracted"), bins2("hd_crc_p2"), rules.crc_regions.output, "results/platforms/common_genes_crc.txt"
+    output: expand("results/artifacts/mastcells_{st}.json", st=["twopoint", "cells", "hd", "background", "isolation"]),
+            "results/artifacts/mastcells_table.md"
+    log: "logs/artifacts/mastcells.log"
+    conda: ENV_SCOTE
+    threads: 4
+    resources: mem_mb=64000, runtime=240
+    shell:
+        "(for st in twopoint cells background isolation; do python scripts/mast_cells.py $st || exit 1; done && "
+        "python scripts/mast_cells.py hd --subsample 200000 && python scripts/mast_cells.py table) > {log} 2>&1"
+
+rule make_fig5:
+    input: "results/artifacts/collapse.json", "results/artifacts/acta2_regions.json",
+           expand("results/artifacts/mastcells_{st}.json", st=["twopoint", "cells", "hd"])
+    output: "figures/fig5_artifacts.pdf", "figures/fig5_artifacts.png"
+    log: "logs/figures/make_fig5.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=4000, runtime=20
+    shell: "python figures/make_fig5.py > {log} 2>&1"
+
+# ------------------------------------------------------------------ Fig. 6: compute benchmark (rows: workflows/bench.smk)
+rule make_fig6:
+    input: expand(BENCH + "/scote_{p}.jsonl", p=list(PROFILES)), BENCH + "/kdtree.jsonl", BENCH + "/squidpy.jsonl", BENCH + "/tacco.jsonl"
+    output: "figures/fig6_compute.pdf", "figures/fig6_compute.png", BENCH + "/summary.json"
+    log: "logs/figures/make_fig6.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=4000, runtime=20
+    shell: "python figures/make_fig6.py > {log} 2>&1"
+
+# ------------------------------------------------------------------ Fig. S3: sequencing-depth ablation (FF ovarian sections)
+OVFF_RAW = [str(DATA / f"raw/{ds}/.extracted") for ds in ("ovff_xenium_5k", "ovff_hd_probe_deep")]
+OVFF_RUNS = {"ovff_xenium_5k": "5k_5k_ref_t500", "ovff_hd_probe_deep": "hdd_5k_ref_t500", "ovff_hd_probe_min": "hdm_5k_ref_t500"}
+THIN = ["0.125", "0.25", "0.335", "0.5"]
+
+rule ovff_register:
+    # H&E registration of the Visium HD probe section (deep and min depth share the slide) into the Xenium 5K frame
+    input: OVFF_RAW, str(DATA / "archives/ovff_hd_probe_deep/.downloaded")
+    output: "results/ovff/registration/transforms.json"
+    log: "logs/ovff/register.log"
+    conda: ENV_SCOTE
+    threads: 8
+    resources: mem_mb=96000, runtime=240
+    shell: "python scripts/register_ovff.py --sections ovff_hd_probe_deep > {log} 2>&1"
+
+rule ovff_masks:
+    # region masks (tissue, tumor, stroma, immune, necrosis, vessel) in the 5K frame, read by the tile table
+    input: "results/ovff/registration/transforms.json", str(DATA / "raw/ovff_xenium_5k/.extracted")
+    output: str(DATA / "ovff/masks/regions_10um.npz"), "results/ovff/registration/region_areas.csv"
+    log: "logs/ovff/masks.log"
+    conda: ENV_SCOTE
+    threads: 4
+    resources: mem_mb=64000, runtime=120
+    shell: "python scripts/masks_ovff.py > {log} 2>&1"
+
+rule ovff_genes:
+    # gene set 5k: the 1,000 genes of 5K ∩ Visium HD probe panel with the largest geometric-mean count fraction
+    input: molecules("ovff_xenium_5k"), bins2("ovff_hd_probe_deep"), bins2("ovff_hd_probe_min")
+    output: "results/ovff/crossplatform/genes_5k.txt", "results/ovff/crossplatform/genes.json"
+    log: "logs/ovff/genes.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=64000, runtime=60
+    shell: "python scripts/ovff_crossplatform.py genes --genesets 5k > {log} 2>&1"
+
+OVFF_SECTION = dict((v, k) for k, v in OVFF_RUNS.items())
+
+def ovff_input(w):
+    s = OVFF_SECTION[w.run]
+    return [molecules(s) if s == "ovff_xenium_5k" else bins2(s), "results/ovff/crossplatform/genes_5k.txt",
+            "results/ovff/registration/transforms.json"]
+
+rule ovff_twopoint:
+    # registered 2 um lattice run of one section on gene set 5k, 500 um tiles on the fixed grid of the 5K frame
+    input: ovff_input
+    output: TP + "/ovff/{run}.npz"
+    wildcard_constraints: run="|".join(OVFF_RUNS.values())
+    params: section=lambda w: OVFF_SECTION[w.run]
+    log: "logs/ovff/twopoint_{run}.log"
+    conda: ENV_SCOTE
+    threads: 4
+    resources: mem_mb=96000, runtime=240, gpu=1
+    shell: "python scripts/ovff_crossplatform.py twopoint --sections {params.section} --geneset 5k --frame ref > {log} 2>&1"
+
+rule ovff_thinned:
+    # the deep Visium HD probe run with the bin counts binomially thinned to a fraction p (seed 0)
+    input: bins2("ovff_hd_probe_deep"), "results/ovff/crossplatform/genes_5k.txt", "results/ovff/registration/transforms.json"
+    output: TP + "/ovff/hdd_5k_ref_t500_thin{p}.npz"
+    wildcard_constraints: p="|".join(t.replace(".", r"\.") for t in THIN)
+    log: "logs/ovff/twopoint_thin{p}.log"
+    conda: ENV_SCOTE
+    threads: 4
+    resources: mem_mb=96000, runtime=240, gpu=1
+    shell: "python scripts/ovff_crossplatform.py twopoint --sections ovff_hd_probe_deep --geneset 5k --frame ref --thin {wildcards.p} > {log} 2>&1"
+
+rule ovff_tiles:
+    # tile table on the fixed 500 um grid: tissue and region fractions, per-section counts, matched tiles
+    input: expand(TP + "/ovff/{run}.npz", run=OVFF_RUNS.values()), str(DATA / "ovff/masks/regions_10um.npz")
+    output: "results/ovff/crossplatform/tiles_5k_t500.csv", "results/ovff/crossplatform/tiles_5k_t500.json"
+    log: "logs/ovff/tiles.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=32000, runtime=60
+    shell: "python scripts/ovff_crossplatform.py tiles --geneset 5k --tile-um 500 --run-tile-um 500 --no-hd3 > {log} 2>&1"
+
+rule depth_tables:
+    input: expand(TP + "/ovff/{run}.npz", run=["hdd_5k_ref_t500", "hdm_5k_ref_t500"]),
+           expand(TP + "/ovff/hdd_5k_ref_t500_thin{p}.npz", p=THIN), "results/ovff/crossplatform/tiles_5k_t500.csv"
+    output: expand("results/ovff/depth/power_{d}.json", d=["deep", "min", "thin0.125", "thin0.25", "thin0.335", "thin0.5"]),
+            "results/ovff/depth/scaling.json"
+    log: "logs/ovff/depth_tables.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=64000, runtime=120
+    shell: "(python scripts/ovff_depth.py power && python scripts/ovff_depth.py scaling) > {log} 2>&1"
+
+rule make_figS3:
+    input: rules.depth_tables.output
+    output: "figures/figS3_depth.pdf", "figures/figS3_depth.png"
+    log: "logs/figures/make_figS3.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=4000, runtime=20
+    shell: "python figures/make_figS3.py > {log} 2>&1"
+
+# ------------------------------------------------------------------ Fig. S4: sub-micrometer end (CosMx kidney, AVITI24)
+rule kidney_fetch:
+    # GEO GSE282059 (Reck et al. 2025), CosMx 6k human kidney, slide 2B_FFPE: molecule table and FOV positions
+    output: KIDNEY_RAW + "/GSE282059_2B_FFPE_tx_file.csv.gz", KIDNEY_RAW + "/GSE282059_2B_FFPE_fov_positions_file.csv.gz"
+    log: "logs/fetch/cosmx_kidney.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=1000, runtime=240, download=1
+    shell:
+        "for f in {output}; do curl -L --fail --retry 5 -C - -o $f.part {GEO}/$(basename $f) && mv $f.part $f || exit 1; "
+        "gzip -t $f || exit 1; done > {log} 2>&1"
+
+rule kidney_convert:
+    input: rules.kidney_fetch.output
+    output: "results/cosmx_kidney/convert_summary.json", directory(KIDNEY_PIECE)
+    log: "logs/fetch/cosmx_kidney_convert.log"
+    conda: ENV_SCOTE
+    threads: 4
+    resources: mem_mb=32000, runtime=120
+    shell: "python scripts/cosmx_kidney_convert.py --threads {threads} > {log} 2>&1"
+
+rule aviti24_convert_well:
+    input: str(DATA / "archives/aviti24_a549_screen/.downloaded")
+    output: str(DATA / "processed/aviti24_{w}/molecules.parquet"), "results/qc/aviti24_{w}.json"
+    log: "logs/fetch/aviti24_{w}.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=4000, runtime=60
+    shell:
+        "python -m scote convert --platform aviti24 --rawdir {AVITI24_ZIP} --well {wildcards.w} --sample aviti24_{wildcards.w} "
+        "--outdir $(dirname {output[0]}) --qc {output[1]} > {log} 2>&1"
+
+rule kidney_pedestal:
+    input: KIDNEY_PIECE, "results/cosmx_kidney/common_genes_matched_aviti24.txt",
+           expand(str(DATA / "processed/aviti24_{w}/molecules.parquet"), w=WELLS)
+    output: "results/cosmx_kidney/crossplatform_pedestal_bin05_direct.json"
+    log: "logs/cosmx_kidney/pedestal.log"
+    conda: ENV_SCOTE
+    threads: 8
+    resources: mem_mb=64000, runtime=240
+    shell:
+        "python scripts/pedestal_direct.py --threads {threads} --aviti24 recompute "
+        "--panel results/cosmx_kidney/common_genes_matched_aviti24.txt --cosmx-dir {KIDNEY_PIECE} --tag kidney_matched "
+        "--tensor-dir {TP}/pedestal_bin05_kidney --out-json {output} > {log} 2>&1"
+
+rule kidney_resolution:
+    input: KIDNEY_PIECE
+    output: "results/cosmx_kidney/resolution.json"
+    log: "logs/cosmx_kidney/resolution.log"
+    conda: ENV_SCOTE
+    threads: 8
+    resources: mem_mb=32000, runtime=120
+    shell:
+        "python scripts/cosmx_resolution.py --processed {KIDNEY_PIECE} --n-fov 16 --delta 0.05 --n-distance-bins 60 --tile-um 200 "
+        "--top-genes 150 --threads {threads} --title 'CosMx 6k kidney GSE282059 (analysis piece)' "
+        "--out-json {output} --out-fig {QL}/cosmx_kidney_resolution.png > {log} 2>&1"
+
+rule aviti24_zprojection:
+    input: expand(str(DATA / "processed/aviti24_{w}/molecules.parquet"), w=BASELINE)
+    output: "results/cosmx/aviti24_zprojection_correction.json"
+    log: "logs/aviti24/zprojection.log"
+    conda: ENV_SCOTE
+    threads: 8
+    resources: mem_mb=32000, runtime=120
+    shell:
+        "python scripts/aviti24_zprojection_correction.py --top-genes 50 --baseline-only --threads {threads} "
+        "--out-json {output} --out-fig {QL}/aviti24_zprojection_correction.png > {log} 2>&1"
+
+rule make_figS4:
+    input: "results/cosmx_kidney/crossplatform_pedestal_bin05_direct.json", "results/cosmx_kidney/resolution.json",
+           "results/cosmx/aviti24_zprojection_correction.json"
+    output: "figures/figS4_subcellular.pdf", "figures/figS4_subcellular.png", "results/cosmx_kidney/figS4_numbers.json"
+    log: "logs/figures/make_figS4.log"
+    conda: ENV_SCOTE
+    resources: mem_mb=4000, runtime=20
+    shell: "python figures/make_figS4.py > {log} 2>&1"

@@ -1,0 +1,20 @@
+# Operators of preprint Fig. 3 on the SpatialBench spleen Xenium sections (100-gene panel), read by
+# scripts/spleen_operators.py and scripts/spleen_cell_baselines.py.
+# Operator = label per molecule: gene-defined where a gene is specific, resolved by a smoothed score where it is shared.
+# Scores: marker counts binned to a 1 um grid, Gaussian sigma = 5 um, divided by the smoothed total density of all panel
+# genes (fraction), evaluated at the molecule position. Mki67, Cxcr5, Pdcd1, Ms4a1 and Cd79a are not on the panel.
+sigma_um: 5.0
+grid_um: 1.0
+operators:
+  B:      {genes: [Cd19, Ighd, Ighm], rule: gene}                     # follicular and all B cells
+  T:      {genes: [Cd3e, Cd3d, Trac, Cd8a], rule: gene}               # T cells (Cd4 handled below)
+  GCB:    {genes: [Aicda, Rgs13], rule: gene}                          # germinal-center B cells
+  FDC:    {genes: [Cr2, Fcer2a], rule: score, score_genes: [Cr2, Fcer2a], quantile: 0.8, else: B_Cr2}
+          # Cr2/Fcer2a are also on follicular B cells; a Cr2/Fcer2a molecule is called FDC when the local Cr2+Fcer2a fraction
+          # (sigma 5 um) is in the top 20 % of all Cr2/Fcer2a molecules (dense FDC network), otherwise 'B_Cr2'
+  Tfh:    {genes: [Cd4], rule: score, score_genes: [Bcl6], quantile: 0.8, else: T_Cd4}
+          # a Cd4 molecule is called Tfh when the local Bcl6 fraction (sigma 5 um) is in the top 20 % of Cd4 molecules, else 'T_Cd4'
+sections:
+  WT: [sb_xenium_WT709_rep1, sb_xenium_WT713, sb_xenium_WT710_rep1]
+  KO: [sb_xenium_KO166, sb_xenium_KO168, sb_xenium_KO167]
+  Ctrl: [sb_xenium_Ctrl172_rep1, sb_xenium_Ctrl173_rep1, sb_xenium_Ctrl174_rep1]   # Tbx21^fl/fl Cd23^cre-negative controls
